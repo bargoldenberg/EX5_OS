@@ -13,10 +13,11 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
-node* stack = (node*)mmap(NULL, (1024+16)*10000
-,PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0 );
-int* size = (int*)mmap(NULL, sizeof(int)
-,PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+#define WORDSIZE (1024+16)*10000
+
+//Global pointers for shared mem between proccesses.
+node* stack = (node*)mmap(NULL, WORDSIZE ,PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0 );
+int* size = (int*)mmap(NULL, sizeof(int) ,PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 
 int main(){
     *size=0;
@@ -36,18 +37,3 @@ int main(){
     munmap(stack,(1024+16)*10000);
 }
 
-// int* num = (int*)mmap(NULL, sizeof(int)*2 ,PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0 );
-// void changenum(int* num){
-//     num[0]=33;
-// }
-// int main(){
-//     num[0] =30;
-//     if(!fork()){
-//         num[1]=40;
-//         changenum(num);
-//     }else{
-//         wait(NULL);
-//     }
-//     printf("%d\n",num[0]);
-//     printf("%d\n",num[1]);
-// }

@@ -1,7 +1,18 @@
 /*
 ** server.c -- a stream socket server demo
 */
-
+#ifdef USE_MAP_ANON
+#define _BSD_SOURCE
+#endif  
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <sys/wait.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -28,6 +39,9 @@ node* stack = (node*)mmap(NULL, WORDSIZE ,PROT_READ | PROT_WRITE, MAP_SHARED | M
 node* start=stack;
 int* size = (int*)mmap(NULL, sizeof(int) ,PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0 );
 
+int* addr;
+int fd;
+struct flock lock;
 
 
 void sigchld_handler(int s)
@@ -50,20 +64,29 @@ void *stack_operations(int new_fd){
         bzero(buffer,sizeof(buffer));//used to reset buffer
         if(recv(new_fd,buffer,1024,0)){//wait for command from client.
             if(!(strncmp(buffer,"PUSH",4))){//strncmp is a special function used to compare a specific amount of bytes between 2 strings.
-                char* msg= (char*)malloc(sizeof(char)*1024);
+                fcntl(fd, F_SETLKW, &lock);
+				char* msg= (char*)malloc(sizeof(char)*1024);
                 bzero(msg,1024);
                 int k=0;
                 for(size_t i=5;i<strlen(buffer)+1;i++){//insert desired message into the stack.
                     msg[k++]=buffer[i];
                 }
                 PUSH(stack,msg,1024,size);
+				lock.l_type = F_UNLCK;
+    			fcntl(fd, F_SETLKW, &lock);
             }else if(!(strncmp(buffer,"POP",3))){//pop.
+				fcntl(fd, F_SETLKW, &lock);
                 POP(size);
+				lock.l_type = F_UNLCK;
+    			fcntl(fd, F_SETLKW, &lock);
             }else if(!(strncmp(buffer,"TOP",3))){//top.
+				fcntl(fd, F_SETLKW, &lock);
                 char * s  = TOP(stack,size);
                 printf("OUTPUT: %s\n",s);
 				//printf("start: %s",start->data);
                 send(new_fd,s,strlen(s)+1,0);//because top is the only function that returns an output it is sent the client.
+				lock.l_type = F_UNLCK;
+    			fcntl(fd, F_SETLKW, &lock);
             }else if(!(strncmp(buffer,"EXIT",4))){//used to kill thread.
                 munmap(start,WORDSIZE);
 				munmap(size,sizeof(int));
@@ -86,6 +109,9 @@ void *get_in_addr(struct sockaddr *sa)
 
 int main(void)
 {
+	fd = open("./lock.txt",O_RDWR, S_IRUSR | S_IWUSR);
+    memset(&lock, 0, sizeof (lock));
+    lock.l_type = F_WRLCK;
 	*size = 0;
 	int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
 	struct addrinfo hints, *servinfo, *p;

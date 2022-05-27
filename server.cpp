@@ -20,10 +20,13 @@
 #include <iostream>
 #define PORT "3500"  // the port users will be connecting to
 using namespace std;
+#define WORDSIZE (1024+16)*1000
 #define BACKLOG 10	 // how many pending connections queue will hold
 //global pointers for shared memory.
-node** stack = NULL;
-node** start = NULL;
+
+node* stack = (node*)mmap(NULL, WORDSIZE ,PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0 );
+node* start=stack;
+int* size = (int*)mmap(NULL, sizeof(int) ,PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0 );
 
 
 
@@ -53,16 +56,17 @@ void *stack_operations(int new_fd){
                 for(size_t i=5;i<strlen(buffer)+1;i++){//insert desired message into the stack.
                     msg[k++]=buffer[i];
                 }
-                stack = PUSH(stack,msg,1024);
+                PUSH(stack,msg,1024,size);
             }else if(!(strncmp(buffer,"POP",3))){//pop.
-                stack = POP(stack);
+                POP(size);
             }else if(!(strncmp(buffer,"TOP",3))){//top.
-                char * s  = TOP(stack);
+                char * s  = TOP(stack,size);
                 printf("OUTPUT: %s\n",s);
 				//printf("start: %s",start->data);
                 send(new_fd,s,strlen(s)+1,0);//because top is the only function that returns an output it is sent the client.
             }else if(!(strncmp(buffer,"EXIT",4))){//used to kill thread.
-                munmap(*start,1000+1024+16);
+                munmap(start,WORDSIZE);
+				munmap(size,sizeof(int));
 				break;
             }
         }
@@ -82,9 +86,7 @@ void *get_in_addr(struct sockaddr *sa)
 
 int main(void)
 {
-	node* ptr = (node*)mmap(NULL, (1024+16)*10000,PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0 );
-	stack = &ptr;
-	start = &ptr;
+	*size = 0;
 	int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
 	struct addrinfo hints, *servinfo, *p;
 	struct sockaddr_storage their_addr; // connector's address information
